@@ -98,7 +98,7 @@ for /f "tokens=1-8" %%a in ('curl -s -k -A %uagent% -e "%url%" "https://api.peri
     set value3=%%g
 )
 
-set base_url=%replay_url:/playlist.m3u8=%
+set base_url=%replay_url:/playlist=&rem.%
 
 set header="Cookie:%name1%=%value1%;%name2%=%value2%;%name3%=%value3%"
 
