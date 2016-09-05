@@ -1,13 +1,25 @@
 @if (@X)==(@Y) @end  /* harmless hybrid line that begins a JScript comment
 @goto :batch
 ::
-::getTimestamp.bat version 2.3 by Dave Benham
+::getTimestamp.bat version 2.6 by Dave Benham
 ::
 ::  Release History:
-::    2.3 2015-07-12 - Added {ISO-xx}, {ISOxx}, {DY} and {DDY} formats
+::    2.6 2016-07-10 - Added -OLM and -OLD to allow addition of months/years
+::                     without changing the local hour. In other words, the
+::                     computation compensates for changes in dayling savings
+::                     conditions.
+::    2.5 2016-07-09 - Fixed bug with offset computations when the before and
+::                     after have different time zones due to daylight savings.
+::    2.4 2015-11-27 - Added formats to support comma as decimal mark in
+::                     ISO 8601 time and timestamp formats.
+::                     Added formats to support ISO 8601 week dates
+::                     and ordinal dates.
+::                     Rearranged documentation, and added examples for
+::                     base date specified as a list of numeric values.
+::    2.3 2015-07-11 - Added {ISO-xx}, {ISOxx}, {DY} and {DDY} formats
 ::                     Added -?? (paged help) option
 ::                     Allow user defined default option values by defining
-::                     variables of the form "GetTimestamp-Option=Value"
+::                     variables of the form "GetTimestamp-OPTION=VALUE"
 ::    2.2 2014-12-03 - Doc fix: -R ReturnVariable is unchanged if err occurs
 ::    2.1 2014-12-03 - Added GOTO at top to increase performance (32% faster)
 ::    2.0 2014-12-02 - Major rewrite: most code now in JScript (25% faster)
@@ -24,16 +36,16 @@
 :::
 :::  Displays a formatted timestamp. Defaults to the current local date
 :::  and time using an ISO 8601 format with milliseconds, time zone
-:::  and punctuation.
+:::  and punctuation, using period as a decimal mark.
 :::
 :::  Returned ERRORLEVEL is 0 upon success, 1 if failure.
 :::
 :::  Options may be prefaced with - or /
 :::
 :::  All options have default values. The default value can be overridden by
-:::  defining a variable of the form "GetTimestamp-OPTION=VALUE". For example,
-:::  upper case English weekday abbreviations can be specified as the default
-:::  by defining "GetTimestamp-WKD=SUN MON TUE WED THU FRI SAT".
+:::  defining an evironment variable of the form "GetTimestamp-OPTION=VALUE".
+:::  For example, upper case English weekday abbreviations can be specified as
+:::  the default by defining "GetTimestamp-WKD=SUN MON TUE WED THU FRI SAT".
 :::
 :::  Command line option values take precedence, followed by environment variable
 :::  defaults, followed by built in defaults.
@@ -45,17 +57,6 @@
 :::    -?? : Prints this documentation with pagination via MORE
 :::
 :::    -V  : Prints the version of getTimeStamp
-:::
-:::    -U  : Returns a UTC timestamp instead of local timestamp.
-:::          Default is a local timestamp.
-:::
-:::    -Z TimeZoneMinuteOffset
-:::
-:::       Returns the timestamp using the specified time zone offset.
-:::       TimeZoneMinuteOffset is a JScript numeric expression that
-:::       represents the number of minutes offset from UTC.
-:::       Decimal values are truncated.
-:::       Default is empty, meaning local timezone.
 :::
 :::    -D DateSpec
 :::
@@ -107,6 +108,33 @@
 :::           the last day of the prior month. The date/time value is always
 :::           in local time. There is no mechanism to specify a time zone.
 :::
+:::           Examples: (all in local time)
+:::             "2012,0,1,12,45,3,121"  12:45:03.121 on Jan 1, 2012
+:::             "2012,0,1,12"           Noon on Jan 1, 2012
+:::             "2012,1,1"              Midnight on Feb 1, 2012
+:::             "2012,2,0"              Midnight on Feb 29, 2012 (last day of Feb)
+:::             "2012,2"                Midnight on Feb 29, 2012 (last day of Feb)
+:::
+:::           The ability to use JScript expressions makes it convenient to do
+:::           date and time offset computations in a very compact form.
+:::
+:::           For example, starting with:
+:::             "2015,8,7,14,5"        Sep 7, 2015 at 14:05:00
+:::
+:::           It is simple to subtract 30 days and 30 minutes from the above:
+:::             "2015,8,7-30,14,5-30"  Aug 8, 2015 at 13:35:00
+:::
+:::    -U  : Returns a UTC timestamp instead of local timestamp.
+:::          Default is a local timestamp.
+:::
+:::    -Z TimeZoneMinuteOffset
+:::
+:::       Returns the timestamp using the specified time zone offset.
+:::       TimeZoneMinuteOffset is a JScript numeric expression that
+:::       represents the number of minutes offset from UTC.
+:::       Decimal values are truncated.
+:::       Default is empty, meaning local timezone.
+:::
 :::    -OY YearOffset
 :::
 :::       Specify the number of years to offset the base date/time.
@@ -115,15 +143,33 @@
 :::
 :::    -OM MonthOffset
 :::
-:::       Specify the number of months to offset the base date/time.
-:::       The JScript numeric expression is truncated to an integral number.
-:::       Default is 0
+:::       Specify the number of months to offset the base date/time, ignoring
+:::       local daylight savings conditions. The change is guaranteed to be a
+:::       multiple of 24 hours. The JScript numeric expression is truncated to
+:::       an integral number. Default is 0
+:::
+:::    -OLM LocalMonthOffset
+:::
+:::       Specify the number of months to offset the base date/time, taking into
+:::       account local daylight savings conditions. The change may not be a
+:::       multiple of 24 hours if the offset results in a change from standard
+:::       to daylight savings, or vice versa. The JScript numeric expression is
+:::       truncated to an integral number. Default is 0
 :::
 :::    -OD DayOffset
 :::
-:::       Specify the number of days to offset the base date/time.
-:::       The JScript numeric expression is truncated to an integral number.
-:::       Default is 0
+:::       Specify the number of days to offset the base date/time, ignoring
+:::       local daylight savings conditions. The change is guaranteed to be a
+:::       multiple of 24 hours. The JScript numeric expression is truncated to
+:::       an integral number. Default is 0
+:::
+:::    -OLD LocalDayOffset
+:::
+:::       Specify the number of days to offset the base date/time, taking into
+:::       account local daylight savings conditions. The change may not be a
+:::       multiple of 24 hours if the offset results in a change from standard
+:::       to daylight savings, or vice versa. The JScript numeric expression is
+:::       truncated to an integral number. Default is 0
 :::
 :::    -OH HourOffset
 :::
@@ -152,7 +198,7 @@
 :::    -F FormatString
 :::
 :::       Specify the timestamp format.
-:::       Default is "{ISO-TS}"
+:::       Default is "{ISO-TS.}"
 :::       Strings within braces are dynamic components.
 :::       All other strings are literals.
 :::       Available components (case insensitive) are:
@@ -187,7 +233,7 @@
 :::                    2) GetTimestamp-WKD environment variable
 :::                    3) Mixed case, English day abbreviations
 :::
-:::         {W}     day of week number, 0=Sunday
+:::         {W}     day of week number: 0=Sunday, 6=Saturday
 :::
 :::         {DD}    2 digit day of month number, zero padded
 :::
@@ -234,41 +280,88 @@
 :::
 :::         {TZ}    ISO 8601 timezone in +/-hh:mm format
 :::
-:::         {ISOTS} YYYYMMDDThhmmss.fff+hhss
-:::                 Compressed ISO 8601 date/time (timestamp) with milliseconds
-:::                 and time zone
+:::         {ISOTS}  same as {ISOTS.}
 :::
-:::         {ISODT} YYYYMMDD
-:::                 Compressed ISO 8601 date format
+:::         {ISOTS.} YYYYMMDDThhmmss.fff+hhss
+:::                  Compressed ISO 8601 date/time (timestamp) with milliseconds
+:::                  and time zone, using . as decimal mark
 :::
-:::         {ISOTM} hhmmss.fff
-:::                 Compressed ISO 8601 time format with milliseconds
+:::         {ISOTS,} YYYYMMDDThhmmss,fff+hhss
+:::                  Compressed ISO 8601 date/time (timestamp) with milliseconds
+:::                  and time zone, using , as decimal mark
 :::
-:::         {ISOTZ} +hhmm
-:::                 Compressed ISO 8601 timezone format
+:::         {ISODT}  YYYYMMDD
+:::                  Compressed ISO 8601 date format
 :::
-:::         {ISO-TS} YYYY-MM-DDThh:mm:ss.fff+hh:ss
+:::         {ISOTM}  same as {ISOTM.}
+:::
+:::         {ISOTM.} hhmmss.fff
+:::                  Compressed ISO 8601 time format with milliseconds,
+:::                  using . as decimal mark
+:::
+:::         {ISOTM,} hhmmss,fff
+:::                  Compressed ISO 8601 time format with milliseconds,
+:::                  using , as decimal mark
+:::
+:::         {ISOTZ}  +hhmm
+:::                  Compressed ISO 8601 timezone format
+:::
+:::         {ISOWY}  yyyy
+:::                  ISO 8601 week numbering year
+:::                  Dec 29, 30, or 31 may belong to the next Jan year
+:::                  Jan 01, 02, or 03 may belong to the prior Dec year
+:::
+:::         {ISOWK}  ww
+:::                  ISO 8601 week number
+:::                  Week 01 is the week with the year's first Thursday
+:::
+:::         {ISOWD}  d
+:::                  ISO 8601 day of week: 1=Monday, 7=Sunday
+:::
+:::         {ISODTW} yyyyWwwd
+:::                  Compressed ISO 8601 week date format
+:::
+:::         {ISODTO} YYYYDDD
+:::                  Compressed ISO 8601 ordinal date format
+:::
+:::         {ISO-TS} same as {ISO-TS.}
+:::
+:::         {ISO-TS.} YYYY-MM-DDThh:mm:ss.fff+hh:ss
 :::                  ISO 8601 date/time (timestamp) with milliseconds and time zone
+:::                  using . as decimal mark
+:::
+:::         {ISO-TS,} YYYY-MM-DDThh:mm:ss,fff+hh:ss
+:::                  ISO 8601 date/time (timestamp) with milliseconds and time zone
+:::                  using , as decimal mark
 :::
 :::         {ISO-DT} YYYY-MM-DD
 :::                  ISO 8601 date format
 :::
-:::         {ISO-TM} hh:mm:ss.fff
-:::                  ISO 8601 time format with milliseconds
+:::         {ISO-TM} same as {ISO-TM.}
+:::
+:::         {ISO-TM.} hh:mm:ss.fff
+:::                  ISO 8601 time format with milliseconds,
+:::                  using . as decimal mark
+:::
+:::         {ISO-TM,} hh:mm:ss,fff
+:::                  ISO 8601 time format with milliseconds,
+:::                  using , as decimal mark
 :::
 :::         {ISO-TZ} +hh:mm
 :::                  ISO 8601 timezone  (same as {TZ})
 :::
-:::         {U}     Unix Epoch time: same as {US}
-:::                 Seconds since 1970-01-01 00:00:00 UTC.
-:::                 Negative numbers represent dates prior to 1970-01-01.
-:::                 This value is unaffected by the -U option.
-:::                 This value should not be used with the -Z option
+:::         {ISO-DTW} yyyy-Www-d
+:::                  ISO 8601 week date format
+:::
+:::         {ISO-DTO} YYYY-DDD
+:::                  ISO 8601 ordinal date format
 :::
 :::         {UMS}   Milliseconds since 1970-01-01 00:00:00.000 UTC.
 :::                 Negative numbers represent days prior to 1970-01-01.
 :::                 This value is unaffected by the -U option.
 :::                 This value should not be used with the -Z option
+:::
+:::         {U}     Same as {US}
 :::
 :::         {US}    Seconds since 1970-01-01 00:00:00.000 UTC.
 :::                 Negative numbers represent days prior to 1970-01-01.
@@ -367,6 +460,8 @@ set ^"options=^
  -on:""^
  -os:""^
  -of:""^
+ -olm:""^
+ -old:""^
  -r:""^
  -wkd:"Sun Mon Tue Wed Thu Fri Sat"^
  -weekday:"Sunday Monday Tuesday Wednesday Thursday Friday Saturday"^
@@ -438,7 +533,7 @@ var env  = WScript.CreateObject("WScript.Shell").Environment("Process"),
     month   = env('-MONTH').split(' '),
     stderr  = WScript.StdErr,
     y,m,d,w,h,h12,n,s,f,u,z,zs,za,
-    pc=':', pd='-', pp='.', p2='00', p3='000', p4='0000';
+    pc=':', pcm=',', pd='-', pp='.', p2='00', p3='000', p4='0000';
 
 if (wkd.length!=7)     badOp('-WKD');
 if (weekday.length!=7) badOp('-WEEKDAY');
@@ -452,14 +547,17 @@ try {
   if (isNaN(dt)) badOp('-D');
 }
 
-if (env('-OY')) dt.setFullYear(     dt.getFullYear()    +getNum('-OY') );
-if (env('-OM')) dt.setMonth(        dt.getMonth()       +getNum('-OM') );
-if (env('-OD')) dt.setDate(         dt.getDate()        +getNum('-OD') );
-if (env('-OH')) dt.setHours(        dt.getHours()       +getNum('-OH') );
-if (env('-ON')) dt.setMinutes(      dt.getMinutes()     +getNum('-ON') );
-if (env('-OS')) dt.setSeconds(      dt.getSeconds()     +getNum('-OS') );
-if (env('-OF')) dt.setMilliseconds( dt.getMilliseconds()+getNum('-OF') );
-if (env('-Z'))  dt.setMinutes(      dt.getMinutes()  +(z=getNum('-Z')) );
+if (env('-OY')) dt.setUTCFullYear(     dt.getUTCFullYear()    +getNum('-OY') );
+if (env('-OM')) dt.setUTCMonth(        dt.getUTCMonth()       +getNum('-OM') );
+if (env('-OD')) dt.setUTCDate(         dt.getUTCDate()        +getNum('-OD') );
+if (env('-OH')) dt.setUTCHours(        dt.getUTCHours()       +getNum('-OH') );
+if (env('-ON')) dt.setUTCMinutes(      dt.getUTCMinutes()     +getNum('-ON') );
+if (env('-OS')) dt.setUTCSeconds(      dt.getUTCSeconds()     +getNum('-OS') );
+if (env('-OF')) dt.setUTCMilliseconds( dt.getUTCMilliseconds()+getNum('-OF') );
+if (env('-Z'))  dt.setUTCMinutes(      dt.getUTCMinutes()  +(z=getNum('-Z')) );
+
+if (env('-OLM')) dt.setMonth(        dt.getMonth()       +getNum('-OLM') );
+if (env('-OLD')) dt.setDate(         dt.getDate()        +getNum('-OLD') );
 
 y = utc ? dt.getUTCFullYear(): dt.getFullYear();
 m = utc ? dt.getUTCMonth()   : dt.getMonth();
@@ -504,6 +602,24 @@ function badOp(option) {
 
 function trunc( n ) { return Math[n>0?"floor":"ceil"](n); }
 
+function weekNum(dt) {
+   var dt2 = new Date(dt.valueOf());
+   var day = (dt.getDay()+6)%7;
+   dt2.setDate(dt2.getDate()-day+3);
+   var now = dt2.valueOf();
+   dt2.setMonth(0, 1);
+   if (dt2.getDay() != 4) {
+      dt2.setMonth( 0, (11-dt2.getDay())%7 + 1 );
+   }
+   return 1 + Math.ceil((now-dt2.valueOf())/604800000);
+}
+
+function weekYr(dt) {
+   var dt2 = new Date(dt.valueOf());
+   dt2.setDate(dt2.getDate()+3-(dt.getDay()+6)%7);
+   return dt2.getFullYear();
+}
+
 function repl($0,$1) {
   switch ($1.toUpperCase()) {
     case 'YYYY' : return lpad(y,p4);
@@ -533,7 +649,7 @@ function repl($0,$1) {
     case 'UMD'  : return (u/1000/60).toString();
     case 'UHD'  : return (u/1000/60/60).toString();
     case 'UDD'  : return (u/1000/60/60/24).toString();
-    case 'U'    : return trunc(u/1000).toString();
+    case 'U'    :
     case 'US'   : return trunc(u/1000).toString();
     case 'UM'   : return trunc(u/1000/60).toString();
     case 'UH'   : return trunc(u/1000/60/60).toString();
@@ -543,15 +659,30 @@ function repl($0,$1) {
     case 'ZS'   : return zs;
     case 'ZH'   : return lpad(trunc(za/60),p2);
     case 'ZM'   : return lpad(za%60,p2);
-    case 'TZ'   : return zs+lpad(trunc(za/60),p2)+':'+lpad(za%60,p2);
-    case 'ISOTS'  : return ''+lpad(y,p4)+lpad(m+1,p2)+lpad(d,p2)+'T'+lpad(h,p2)+lpad(n,p2)+lpad(s,p2)+pp+lpad(f,p3)+zs+lpad(trunc(za/60),p2)+lpad(za%60,p2);
-    case 'ISODT'  : return ''+lpad(y,p4)+lpad(m+1,p2)+lpad(d,p2);
-    case 'ISOTM'  : return ''+lpad(h,p2)+lpad(n,p2)+lpad(s,p2)+pp+lpad(f,p3);
-    case 'ISOTZ'  : return ''+zs+lpad(trunc(za/60),p2)+lpad(za%60,p2);
-    case 'ISO-TS' : return ''+lpad(y,p4)+pd+lpad(m+1,p2)+pd+lpad(d,p2)+'T'+lpad(h,p2)+pc+lpad(n,p2)+pc+lpad(s,p2)+pp+lpad(f,p3)+zs+lpad(trunc(za/60),p2)+pc+lpad(za%60,p2);
-    case 'ISO-DT' : return ''+lpad(y,p4)+pd+lpad(m+1,p2)+pd+lpad(d,p2);
-    case 'ISO-TM' : return ''+lpad(h,p2)+pc+lpad(n,p2)+pc+lpad(s,p2)+pp+lpad(f,p3);
+    case 'TZ'   :
     case 'ISO-TZ' : return ''+zs+lpad(trunc(za/60),p2)+pc+lpad(za%60,p2);
+    case 'ISOTS'  :
+    case 'ISOTS.' : return ''+lpad(y,p4)+lpad(m+1,p2)+lpad(d,p2)+'T'+lpad(h,p2)+lpad(n,p2)+lpad(s,p2)+pp+lpad(f,p3)+zs+lpad(trunc(za/60),p2)+lpad(za%60,p2);
+    case 'ISOTS,' : return ''+lpad(y,p4)+lpad(m+1,p2)+lpad(d,p2)+'T'+lpad(h,p2)+lpad(n,p2)+lpad(s,p2)+pcm+lpad(f,p3)+zs+lpad(trunc(za/60),p2)+lpad(za%60,p2);
+    case 'ISODT'  : return ''+lpad(y,p4)+lpad(m+1,p2)+lpad(d,p2);
+    case 'ISOTM'  :
+    case 'ISOTM.' : return ''+lpad(h,p2)+lpad(n,p2)+lpad(s,p2)+pp+lpad(f,p3);
+    case 'ISOTM,' : return ''+lpad(h,p2)+lpad(n,p2)+lpad(s,p2)+pcm+lpad(f,p3);
+    case 'ISOTZ'  : return ''+zs+lpad(trunc(za/60),p2)+lpad(za%60,p2);
+    case 'ISO-TS' :
+    case 'ISO-TS.': return ''+lpad(y,p4)+pd+lpad(m+1,p2)+pd+lpad(d,p2)+'T'+lpad(h,p2)+pc+lpad(n,p2)+pc+lpad(s,p2)+pp+lpad(f,p3)+zs+lpad(trunc(za/60),p2)+pc+lpad(za%60,p2);
+    case 'ISO-TS,': return ''+lpad(y,p4)+pd+lpad(m+1,p2)+pd+lpad(d,p2)+'T'+lpad(h,p2)+pc+lpad(n,p2)+pc+lpad(s,p2)+pcm+lpad(f,p3)+zs+lpad(trunc(za/60),p2)+pc+lpad(za%60,p2);
+    case 'ISO-DT' : return ''+lpad(y,p4)+pd+lpad(m+1,p2)+pd+lpad(d,p2);
+    case 'ISO-TM' :
+    case 'ISO-TM.': return ''+lpad(h,p2)+pc+lpad(n,p2)+pc+lpad(s,p2)+pp+lpad(f,p3);
+    case 'ISO-TM,': return ''+lpad(h,p2)+pc+lpad(n,p2)+pc+lpad(s,p2)+pcm+lpad(f,p3);
+    case 'ISOWY'  : return ''+lpad(weekYr(dt),p4);
+    case 'ISOWK'  : return ''+lpad(weekNum(dt),p2);
+    case 'ISOWD'  : return ''+((w+6)%7+1);
+    case 'ISODTW' : return ''+lpad(weekYr(dt),p4)+'W'+lpad(weekNum(dt),p2)+((w+6)%7+1);
+    case 'ISODTO' : return ''+lpad(y,p4)+lpad( trunc(((new Date(y,m,d)).getTime()-(new Date(y,0,0)).getTime())/86400000), p3);
+    case 'ISO-DTW': return ''+lpad(weekYr(dt),p4)+pd+'W'+lpad(weekNum(dt),p2)+pd+((w+6)%7+1);
+    case 'ISO-DTO': return ''+lpad(y,p4)+pd+lpad( trunc(((new Date(y,m,d)).getTime()-(new Date(y,0,0)).getTime())/86400000), p3);
     case 'WEEKDAY': return weekday[w];
     case 'WKD'    : return wkd[w];
     case 'MONTH'  : return month[m];

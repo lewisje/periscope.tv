@@ -1,10 +1,26 @@
 @if (@X)==(@Y) @end /* Harmless hybrid line that begins a JScript comment
 @goto :Batch
 
-::JREPL.BAT version 3.6 by Dave Benham
+::JREPL.BAT version 4.5 by Dave Benham
 ::
 ::  Release History:
-::    2015-07-15 v3.6: Added /?? option for paged help
+::    2016-08-03 v4.5: Added /D option to specify delimiter for /N and /OFF.
+::    2016-08-02 v4.4: Bug fix - /C count was wrong when last line did not end
+::                     with new line. This also affected /INC and /EXC.
+::    2016-07-30 v4.3: Added rpad() function and improved lpad()
+::    2016-06-24 v4.2: Improved the /?Options help.
+::    2016-06-23 v4.1: Added /T option examples to the help.
+::                     Added ability to request help on a single option or topic.
+::    2016-06-19 v4.0: Added the /INC and /EXC options.
+::    2016-03-27 v3.8: Bug fix - Hide leaked global variables i, lib, libs, rtn2.
+::                     Bug fix - Work around %~f0 bug when command is quoted.
+::                     Bug fix - Use /OPTIONS instead of OPTIONS as a variable
+::                     name within the option parser so that it is unlikely to
+::                     collide with a user defined variable name.
+::    2016-01-14 v3.7: Reworked error handling a bit.
+::                     Bug fix - \xnn and \unnnn could fail in a regex search
+::                     if result was a meta-character and /X option was used.
+::    2015-07-15 v3.6: Added /?? option for paged help.
 ::    2015-06-12 v3.5: Bug fix for $n or $nn in replace string when /T is
 ::                     used without /J or /JMATCH or /L
 ::    2015-01-22 v3.4: Bug fix - Use /TEST instead of TEST as a variable name
@@ -25,10 +41,10 @@
 ::    2014-11-14 v1.0: Initial release
 ::
 ::============ Documentation ===========
+::/INTRO
 :::
 :::JREPL  Search  Replace  [/Option  [Value]]...
-:::JREPL  /?[REGEX|REPLACE|VERSION]
-:::JREPL  /??
+:::JREPL  /?[?][INTRO|OPTIONS|JSCRIPT|RETURN|HELP|/Option|REGEX|REPLACE]
 :::
 :::  Performs a global regular expression search and replace operation on
 :::  each line of input from stdin and prints the result to stdout.
@@ -59,13 +75,40 @@
 :::
 :::            Replace substitution pattern syntax is fully documented at
 :::            http://msdn.microsoft.com/en-US/library/efy6s3e6(v=vs.80).aspx
+::/OPTIONS
 :::
 :::  Options:  Behavior may be altered by appending one or more options.
 :::  The option names are case insensitive, and may appear in any order
 :::  after the Replace argument.
 :::
-:::      /A  - Only print altered lines. Unaltered lines are discarded.
-:::            If the /S option is used, then prints the result only if
+::      /A                     - write Altered lines only
+::      /B                     - match Beginning of line
+::      /C                     - Count number of source lines
+::      /D                     - Delimiter for /N and /OFF
+::      /E                     - match End of line
+::      /EXC LineNumberList    - EXClude one or more lines
+::      /F InFile              - read from File
+::      /I                     - Ignore case
+::      /INC LineNumberList    - Include one or more lines
+::      /J                     - JScript replace expressions
+::      /JBEG InitCode         - initialization JScript code
+::      /JBEGLN NewLineCode    - line initialization JScript code
+::      /JEND FinalCode        - finalization JScript code
+::      /JENDLN EndLineCode    - line finalization JScript code
+::      /JLIB FileList         - load file(s) of initialization code
+::      /JMATCH                - write matching JScript replacements only
+::      /L                     - Literal search
+::      /M                     - Multi-line mode
+::      /N MinWidth            - prefix output with liNe numbers
+::      /O OutFile             - write Output to a file
+::      /OFF MinWidth          - prefix JMatch output with byte OFFsets
+::      /S VarName             - Source is read from a variable
+::      /T DelimiterChar       - Translate multiple search/replace pairs
+::      /V                     - read search/replace/code from Variables
+::      /X                     - enable eXtended escape sequences
+::/
+:::      /A  - Only write altered lines. Unaltered lines are discarded.
+:::            If the /S option is used, then write the result only if
 :::            there was a change anywhere in the string. The /A option
 :::            is incompatible with the /M option unless the /S option
 :::            is also present.
@@ -77,20 +120,64 @@
 :::            variable cnt. This value can be useful in JScript code associated
 :::            with any of the /Jxxx options.
 :::
+:::            This option is implicityly enabled if /INC or /EXC contains a
+:::            negative value.
+:::
 :::            This option is incompatible with the /M and /S options.
 :::
 :::            If the input data is piped or redirected, then the data is first
 :::            written to a temporary file, so processing does not start until
 :::            the end-of-file is reached.
 :::
+:::      /D  Delimiter
+:::
+:::            Specifies the Delimiter string to use after line numbers and/or
+:::            byte offsets that are output due to the /N or /OFF options.
+:::            The default value is a colon.
+:::
 :::      /E  - The Search must match the end of a line.
 :::            Mostly used with literal searches.
+:::
+:::      /EXC LineNumberList
+:::
+:::            Exclude (do not search/replace) lines within the LineNumberList.
+:::            LineNumberList consists of a comma delimited list of line numbers
+:::            and/or line number ranges. A range is specified as begin:end.
+:::            Negative values are counted backwards from the end. So a value
+:::            of 1 represents the first line, and -1 represents the last line.
+:::
+:::            Any negative value implicitly activates the /C option.
+:::
+:::            The default is an empty list (exclude nothing)
+:::
+:::            Example: Assuming the file contains 25 lines, then the following
+:::                     will exclude lines 3, 10, 11, 12, and 24
+:::
+:::                     /EXC "3,10:12,-2"
 :::
 :::      /F InFile
 :::
 :::            Input is read from file InFile instead of stdin.
 :::
-:::      /I  - Makes the search case-insensitive.
+:::      /I  - Ignore case when searching.
+:::
+:::      /INC LineNumberList
+:::
+:::            Only include (search/replace) lines within the LineNumberList.
+:::            The syntax for LineNumberList is the same as for the /EXC option.
+:::
+:::            Any negative value implicitly activates the /C option.
+:::
+:::            The default is an empty list (include all lines).
+:::
+:::            The /EXC option takes precedence over the /INC option.
+:::
+:::            Example: Assuming the file contains 25 lines, then the following
+:::                     /INC option includes lines 2, and 4-24 inclusive. But the
+:::                     /EXC option excludes lines 6-22 inclusive, so the end
+:::                     result searches only lines 2, 4, 5, 23, and 24.
+:::
+:::                     /INC "2,4:-2" /EXC "6:-4"
 :::
 :::      /J  - The Replace argument is a JScript expression.
 :::            The following variables contain details about each match:
@@ -110,7 +197,7 @@
 :::      /JBEGLN NewLineCode
 :::
 :::            JScript code to run at the beginning of each line, prior to
-:::            performing any matching on the line. The line content may be
+:::            performing any search on the line. The line content may be
 :::            manipulated via the $txt variable. The default code is an empty
 :::            string. This option is incompatible with the /M and /S options.
 :::
@@ -139,7 +226,7 @@
 :::
 :::      /JMATCH
 :::
-:::            Prints each Replace value on a new line, discarding all text
+:::            Write each Replace value on a new line, discarding all text
 :::            that does not match the Search. The Replace argument is a
 :::            JScript expression with access to the same $ variables available
 :::            to the /J option. Replacement values that evaluate to false
@@ -163,7 +250,10 @@
 :::      /N MinWidth
 :::
 :::            Precede each output line with the line number of the source line,
-:::            followed by a colon. Line 1 is the first line of the source.
+:::            followed by a delimiter (colon by default). The default delimiter
+;;;            can be overridden with the /D option.
+:::
+:::            Line 1 is the first line of the source.
 :::
 :::            The MinWidth value specifies the minimum number of digits to
 :::            display. The default value is 0, meaning do not display the
@@ -185,9 +275,11 @@
 :::
 :::            Ignored unless the /JMATCH option is used. Precede each output
 :::            line with the offset of the match within the original source
-:::            string, followed by a colon. Offset 0 is the first character of
-:::            the source string. The offset follows the line number if the /N
-:::            option is also used.
+:::            string, followed by a delimiter (colon by default). The default
+:::            delimiter can be overridden with the /D option.
+:::
+:::            Offset 0 is the first character of the source string. The offset
+:::            follows the line number if the /N option is also used.
 :::
 :::            The MinWidth value specifies the minimum number of digits to
 :::            display. The default value is 0, meaning do not display the
@@ -201,9 +293,8 @@
 :::            of the string, and $ the end of the string. With the /M option,
 :::            ^ anchors the beginning of a line, and $ the end of a line.
 :::
-:::            The variable name cannot match any of the option names, nor can
-:::            it be /TEST. Put another way, any variable can be used as long as
-:::            the name does not begin with a forward slash.
+:::            The variable name must not match any of the option names, nor
+:::            can it be /TEST or /OPTIONS.
 :::
 :::      /T DelimiterChar
 :::
@@ -224,14 +315,12 @@
 :::            expression.
 :::
 :::            The search expressions may be regular expressions, possibly with
-:::            captured subexpression. Note that each expression is itself
-:::            converted into a captured subexpression and the operation is
-:::            performed as a single search/replace upon execution. So
-:::            backreferences within each regex and $n references within each
-:::            replacement expression must be adjusted accordingly.
-:::
-:::            The total number of expressions plus captured subexpressions must
-:::            not exceed 99.
+:::            captured groups. Note that each expression is itself converted into
+:::            a captured group behind the scene, and the operation is performed
+:::            as a single search/replace upon execution. So backreferences within
+:::            each regex, and $n references within each replacement expression
+:::            must be adjusted accordingly. The total number of expressions plus
+:::            captured groups must not exceed 99.
 :::
 :::            If an expression must include a delimiter, then an escape
 :::            sequence must be used.
@@ -240,13 +329,90 @@
 :::            matching expression takes precedence when there are multiple
 :::            matching expressions.
 :::
+:::        Examples using /T:
+:::
+:::          ROT13 - Simple character substitution is achieved by setting the
+:::          /T delimiter to an empty string. The search and replace strings
+:::          must have identical length. The use of line continuation aligns
+:::          the replace string directly below the search string, thus making
+:::          it very easy to see exactly how each character will be translated.
+:::          The "a" in the search string will be replaced by the "n" in the
+:::          replace string. And you can see the symmetry in that the "n" will
+:::          be replaced by "a".
+:::
+:::            echo The quick brown fox jumps over a lazy dog | jrepl^
+:::             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"^
+:::             "nopqrstuvwxyzabcdefghijklmNOPQRSTUVWXYZABCDEFGHIJKLM"^
+:::             /t ""
+:::
+:::            -- OUTPUT --
+:::
+:::            Gur dhvpx oebja sbk whzcf bire n ynml qbt
+:::
+:::          Simple string substitution - The /T option specifies that string
+:::          expressions are delimited by a space. The /L option prevents "."
+:::          from being interpreted as a regex wildcard character.
+:::
+:::            echo The blackbird flew through the blue sky. | jrepl^
+:::             "black blue sky ." "blue black night !" /l /t " "
+:::
+:::            -- OUTPUT--
+:::
+:::            The bluebird flew through the black night!
+:::
+:::          Pig Latin - This example shows how /T can be used with regular
+:::          expressions, and it demonstrates how the numbering of captured
+:::          groups must be adjusted. The /T delimiter is set to a space.
+:::
+:::          The first regex is captured as $1, and it matches words that begin
+:::          with a consonant. The first captured group ($2) contains the initial
+:::          sequence of consonants, and the second captured group ($3) contains
+:::          the balance of the word. The corresponding replacement string moves
+:::          $2 after $3, with a "-" in between, and appends "ay".
+:::
+:::          The second regex matches any word, and it is captured as $4 because
+:::          the prior regex ended with group $3. Because the first regex matched
+:::          all words that begin with consonants, the only thing the second
+:::          regex can match is a word that begins with a vowel. The replacement
+:::          string simply adds "-yay" to the end of $4. Note that $0 could have
+:::          been used instead of $4, and it would yield the same result.
+:::
+:::            echo Can you speak Pig Latin? | jrepl^
+:::             "\b((?:qu(?=[aeiou])|[bcdfghj-np-twxz])+)([a-z']+)\b \b[a-z']+\b"^
+:::             "$3-$2ay $4-yay" /t " " /i
+:::
+:::            -- OUTPUT --
+:::
+:::            an-Cay you-yay eak-spay ig-Pay atin-Lay?
+:::
+:::          Pig-Latin with proper capitalization - This is simply an extension
+:::          of the prior example. The /JBEG option defines a fixCaps() function
+:::          that checks if the translated word is all lower case, except for one
+:::          capital letter after the "-". If so, then the initial letter is
+:::          capitalized, and the remainder is converted to lower caae. The /J
+:::          option treats the replacement strings as JScript expressions. The
+:::          first replacement expression uses fixCaps() to properly restore case.
+:::
+:::            echo Can you speak Pig Latin? | jrepl^
+:::             "\b((?:qu(?=[aeiou])|[bcdfghj-np-twxz])+)([a-z']+)\b \b[a-z']+\b"^
+:::             "fixCaps($3+'-'+$2+'ay') $4+'-yay'"^
+:::             /t " " /i /j /jbeg ^"^
+:::             function fixCaps(str){^
+:::               return str.search(/[a-z']+-[A-Z][a-z]*$/)==0 ?^
+:::               str.substr(0,1).toUpperCase()+str.substr(1).toLowerCase() : str^
+:::             }^"
+:::
+:::            -- OUTPUT --
+:::
+:::            An-cay you-yay eak-spay Ig-pay Atin-lay?
+:::
 :::      /V  - Search, Replace, /JBEG InitCode, /JBEGLN NewLineCode, /JEND
 :::            FinalCode, and /JENDLN EndLineCode all represent the names
 :::            of environment variables that contain the respective values.
 :::            An undefined variable is treated as an empty string.
 :::
 :::            The variable names must not match any of the option names, nor
-:::            can they be /TEST.
+:::            can they be /TEST or /OPTIONS.
 :::
 :::      /X  - Enables extended substitution pattern syntax with support
 :::            for the following escape sequences within the Replace string:
@@ -276,6 +442,7 @@
 :::            Extended escape sequences are not applied to JScript code when
 :::            using any of the /Jxxx options. Use the decode() function if
 :::            extended escape sequences are needed within the code.
+::/JSCRIPT
 :::
 :::  The following global JScript variables/objects/functions are available for
 :::  use in JScript code associated with the /Jxxx options. User code may safely
@@ -299,6 +466,9 @@
 :::               The default value is false.
 :::
 :::               This variable has no impact if the /M or /S options is used.
+:::
+:::               Note that this variable operates independently of the /INC
+:::               and /EXC options.
 :::
 :::      quit   - If true, then do not read any more lines of input. The current
 :::               line is still processed to completion, and /JEND code is still
@@ -326,17 +496,51 @@
 :::               This function is only needed if you use the \q sequence
 :::               or \xnn for an extended ASCII code (values above 0x7F).
 :::
-:::      lpad(value,pad)
+:::      lpad( value, padString )
+:::      lpad( value, length [,padString] )
 :::
 :::               Used to left pad a value to a minimum width string. If the
-:::               value already has string width >= the pad length, then no
+:::               value already has string width >= the desired length, then no
 :::               change is made. Otherwise it left pads the value with the
-:::               characters of the pad string to the width of the pad string.
+:::               characters of the pad string to the desired length. If only
+:::               padString is specified, then the value is padded to the length
+:::               of padString. If length is specified with a padString, then
+:::               padString is replicated as needed to get the desired length.
+:::               If length is specified without padString, then spaces are used
+:::               for the padString.
 :::
 :::               Examples:
-:::                  lpad(15,'0000')    returns "0015"
-:::                  lpad(15,'    ')    returns "  15"
-:::                  lpad(19011,'0000') returns "19011"
+:::                  lpad(15,'    ')        returns '  15'
+:::                  lpad(15,4)             returns '  15'
+:::                  lpad(15,'0000')        returns '0015'
+:::                  lpad(15,4,'0')         returns '0015'
+:::                  lpad(19011,4,'0')      returns '19011'
+:::                  lpad('A','. . . . .')  returns '. . . . .A'
+:::                  lpad('A',9,'. ')       returns '. . . . .A'
+:::                  lpad('AB','. . . . .') returns '. . . . AB'
+:::                  lpad('AB',9,'. ')      returns '. . . . AB'
+:::
+:::      rpad( value, padString )
+:::      rpad( value, length [,padString] )
+:::
+:::               Used to right pad a value to a minimum width string. If the
+:::               value already has string width >= the desired length, then no
+:::               change is made. Otherwise it right pads the value with the
+:::               characters of the pad string to the desired length. If only
+:::               padString is specified, then the value is padded to the length
+:::               of padString. If length is specified with a padString, then
+:::               padString is replicated as needed to get the desired length.
+:::               If length is specified without padString, then spaces are used
+:::               for the padString.
+:::
+:::               Examples:
+:::                  rpad('hello','          ')  returns 'hello     '
+:::                  rpad('hello',10)            returns 'hello     '
+:::                  rpad('hello',' . . . . .')  returns 'hello. . .'
+:::                  rpad('hello',,10,' .')      returns 'hello. . .'
+:::                  rpad('hell',' . . . . .')   returns 'hell . . .'
+:::                  rpad('hell',10,' .')        returns 'hell . . .'
+:::                  rpad('hello',2)             returns 'hello'
 :::
 :::      input  - The TextStream object from which input is read.
 :::               This may be stdin or a file.
@@ -350,18 +554,35 @@
 :::
 :::      stderr - Equivalent to WScript.StdErr
 :::
+:::  See the /J option help for info about local $ variables that may be used
+:::  within replacement code when using /J or /JMATCH.
+::/HELP
+:::
 :::  Help is available by supplying a single argument beginning with /?:
 :::
-:::      /?        - Writes this help documentation to stdout.
-:::      /??       - Same as /? except uses MORE for pagination
+:::      /?        - Writes all available help to stdout.
+:::      /??       - Same as /? except uses MORE for pagination.
+:::
+:::      /?Topic   - Writes help about the specified topic to stdout.
+:::                  Valid topics are INTRO, OPTIONS, JSCRIPT, RETURN,
+:::                  VERSION, and HELP
+:::
+:::                  Example: List a summary of all available options
+:::
+:::                     jrepl /?options
+:::
+:::      /?/Option - Writes help about the specified /Option to stdout.
+:::
+:::                  Example: Display paged help about the /T option
+:::
+:::                     jrepl /??/t
 :::
 :::      /?REGEX   - Opens up Microsoft's JScript regular expression
 :::                  documentation within your browser.
 :::
 :::      /?REPLACE - Opens up Microsoft's JScript REPLACE documentation
 :::                  within your browser.
-:::
-:::      /?VERSION - Writes the JREPL version number to stdout.
+::/RETURN
 :::
 :::  Return Codes:
 :::
@@ -375,57 +596,35 @@
 :::      2 = Invalid call syntax or incompatible options
 :::
 :::      3 = JScript runtime error
+::/VERSION
 :::
-:::  JREPL.BAT was written by Dave Benham, and originally posted at
+:::  JREPL.BAT version 4.5 was written by Dave Benham, and originally posted at
 :::  http://www.dostips.com/forum/viewtopic.php?f=3&t=6044
-:::
+::/
 
 ============= :Batch portion ===========
 @echo off
 setlocal disableDelayedExpansion
 
-if .%2 equ . (
-  if "%~1" equ "/?" (
-    for /f "tokens=* delims=:" %%A in ('findstr "^:::" "%~f0"') do @echo(%%A
-    exit /b 0
-  ) else if "%~1" equ "/??" 2>nul (
-    (for /f "tokens=* delims=:" %%A in ('findstr "^:::" "%~f0"') do @echo(%%A)|more /e
-    exit /b 0
-  ) else if /i "%~1" equ "/?regex" (
-    explorer "http://msdn.microsoft.com/en-us/library/ae5bf541(v=vs.80).aspx"
-    exit /b 0
-  ) else if /i "%~1" equ "/?replace" (
-    explorer "http://msdn.microsoft.com/en-US/library/efy6s3e6(v=vs.80).aspx"
-    exit /b 0
-  ) else if /i "%~1" equ "/?version" (
-    for /f "tokens=* delims=:" %%A in ('findstr "^::JREPL\.BAT" "%~f0"') do @echo(%%A
-    exit /b 0
-  ) else (
-    call :err "Insufficient arguments"
-    exit /b 2
-  )
-)
+:: Process Help
+if .%2 equ . call :help "%~1" && exit /b0 || call :exitErr "Insufficient arguments"
 
 :: Define options
-set "options= /A: /B: /C: /E: /F:"" /I: /J: /JBEG:"" /JBEGLN:"" /JEND:"" /JENDLN:"" /JLIB:"" /JMATCH: /L: /M: /N:0 /O:"" /OFF:0 /S:"" /T:"none" /V: /X: "
- 
+set "/options= /A: /B: /C: /D:":" /E: /EXC:"" /F:"" /I: /INC:"" /J: /JBEG:"" /JBEGLN:"" /JEND:"" /JENDLN:"" /JLIB:"" /JMATCH: /L: /M: /N:0 /O:"" /OFF:0 /S:"" /T:"none" /V: /X: "
+
 :: Set default option values
-for %%O in (%options%) do for /f "tokens=1,* delims=:" %%A in ("%%O") do set "%%A=%%~B"
- 
+for %%O in (%/options%) do for /f "tokens=1,* delims=:" %%A in ("%%O") do set "%%A=%%~B"
+
 :: Get options
 :loop
 if not "%~3"=="" (
   set "/test=%~3"
   setlocal enableDelayedExpansion
-  if "!/test:~0,1!" neq "/" (
-    call :err "Too many arguments"
-    exit /b 2
-  )
-  set "/test=!options:*%~3:=! "
-  if "!/test!"=="!options! " (
+  if "!/test:~0,1!" neq "/" call :exitErr "Too many arguments"
+  set "/test=!/options:*%~3:=! "
+  if "!/test!"=="!/options! " (
       endlocal
-      call :err "Invalid option %~3"
-      exit /b 2
+      call :exitErr "Invalid option %~3"
   ) else if "!/test:~0,1!"==" " (
       endlocal
       set "%~3=1"
@@ -439,37 +638,72 @@ if not "%~3"=="" (
 )
 
 :: Validate options
-if defined /M if defined /A if not defined /S (
-  call :err "/M cannot be used with /A without /S"
-  exit /b 2
-)
-if "%/O%" equ "-" if not defined /F (
-  call :err "Output = - but Input file not specified"
-  exit /b 2
-)
-if defined /F if defined /O for %%A in ("%/F%") do for %%B in ("%/O%") do if %%~fA equ %%~fB (
-  call :err "Output file cannot match Input file"
-  exit /b 2
-)
-if "%/C%%/JBEGLN%%/JENDLN%" neq "" if "%/M%%/S%" neq "" (
-  call :err "/JBEGLN and /JENDLN cannot be used with /M or /S"
-  exit /b 2
-)
+if defined /M if defined /A if not defined /S                                      call :exitErr "/M cannot be used with /A without /S"
+if "%/O%" equ "-" if not defined /F                                                call :exitErr "Output = - but Input file not specified"
+if defined /F for %%A in ("%/F%") do for %%B in ("%/O%") do if "%%~fA" equ "%%~fB" call :exitErr "Output file cannot match Input file"
+if "%/EXC%%/INC%%/C%%/JBEGLN%%/JENDLN%" neq "" if "%/M%%/S%" neq ""                call :exitErr "/C, /EXC, /INC, /JBEGLN, and /JENDLN cannot be used with /M or /S"
 
 :: Transform options
 if defined /JMATCH set "/J=1"
 if "%/M%%/S%" neq "" set "/N=0"
+if not defined /INC goto :endInc
+if "%/INC:-=%" neq "%/INC%" SET "/C=1"
+:endInc
+if not defined /EXC goto :endExc
+if "%/EXC:-=%" neq "%/EXC%" SET "/C=1"
+:endExc
 
-:: Execute
-cscript //E:JScript //nologo "%~f0" %1 %2
+call :GetScript   REM into /test variable
+cscript //E:JScript //nologo "%/test%" %1 %2
 exit /b %errorlevel%
 
-:err
+:GetScript
+set "/test=%~f0"
+exit /b
+
+:help
+setlocal
+set "help=%~1"
+setlocal enableDelayedExpansion
+if "!help:~0,2!" neq "/?" exit /b 1
+set "noMore=1"
+set "help=!help:~2!"
+if defined help if "!help:~0,1!" equ "?" (
+  set "noMore="
+  set "help=!help:~1!"
+)
+if /i "!help!" equ "regex" (
+    explorer "http://msdn.microsoft.com/en-us/library/ae5bf541(v=vs.80).aspx"
+    exit /b 0
+) else if /i "!help!" equ "replace" (
+    explorer "http://msdn.microsoft.com/en-US/library/efy6s3e6(v=vs.80).aspx"
+    exit /b 0
+) else if "!help!" equ "" ( %= /? =%
+    set "find=^:::(.*)"
+    set "repl=$1"
+    set ^"cmd="%~f0" find repl /v /a /f "%~f0"^"
+) else if "!help:~0,1!" equ "/" (   %= /?/Option =%
+    set "find=^:::( {6}!help!(?= |$).*)@^::: {6}/@^:::(.*)@^::/"
+    set "repl=go=true;$2@go=false;false@go?$5:false@go=false"
+    set "jbeg=go=false"
+    set ^"cmd=echo(^&call "%~f0" find repl /v /i /t @ /jmatch /jbeg jbeg /f "%~f0"^|^|echo Help not found for option %help%^"
+) else (  %= /?Section =%
+    set "find=^::/!help!$@^::/@^:::?(.*)"
+    set "repl=go=true;false@go=false@go?$4:false"
+    set "jbeg=go=false"
+    set ^"cmd="%~f0" find repl /v /i /t @ /jmatch /jbeg jbeg /f "%~f0"^|^|(echo(^&echo Help not found for topic %help%^)^"
+)
+if defined noMore (call %cmd%) else (%cmd%) | more /e
+exit /b 0
+
+:exitErr
 >&2 (
   echo ERROR: %~1.
-  echo (Use JREPL /? to get help.^)
+  echo   Use JREPL /? or JREPL /?? to get help.
+  (goto) 2>nul
+  exit /b 2
 )
-exit /b
+
 
 ************* JScript portion **********/
 var _g=new Object();
@@ -492,22 +726,31 @@ try {
   _g.inFile=env('/F');
   _g.outFile=env('/O');
   _g.tempFile='';
+  _g.excludeStr='';
+  _g.excludeResult=false;
+  _g.delim=env('/D');
   if (_g.inFile=='') {
     if (env('/C')) {
       _g.tempFile=_g.fso.GetSpecialFolder(_g.TemporaryFolder).path+'\\'+_g.fso.GetTempName();
       _g.inFile=_g.tempFile;
       input=stdin;
+      cnt=0;
       output=_g.fso.OpenTextFile(_g.tempFile,_g.ForWriting,true);
-      while (!stdin.AtEndOfStream) output.WriteLine(input.ReadLine());
-      cnt=input.line-1;
+      while (!stdin.AtEndOfStream) {
+        output.WriteLine(input.ReadLine());
+        cnt++
+      }
       output.close();
       input=_g.fso.OpenTextFile(_g.tempFile,_g.ForReading);
     } else input=stdin;
   } else {
     if (env('/C')) {
+      cnt=0;
       input=_g.fso.OpenTextFile(_g.inFile,_g.ForReading);
-      while (!input.AtEndOfStream) input.SkipLine();
-      cnt=input.line-1;
+      while (!input.AtEndOfStream) {
+        input.SkipLine();
+        cnt++;
+      }
       input.close();
     }
     input=_g.fso.OpenTextFile(_g.inFile,_g.ForReading);
@@ -521,19 +764,19 @@ try {
   }
   if (env('/JLIB')) {
     _g.loc=' while loading /JLIB code';
-    var libs=env('/JLIB').split('/');
-    for (var i=0; i<libs.length; i++) {
-      var lib=_g.fso.OpenTextFile(libs[i],_g.ForReading);
-      if (!lib.AtEndOfStream) eval(lib.ReadAll());
-      lib.close();
+    _g.libs=env('/JLIB').split('/');
+    for (_g.i=0; _g.i<_g.libs.length; _g.i++) {
+      _g.lib=_g.fso.OpenTextFile(_g.libs[_g.i],_g.ForReading);
+      if (!_g.lib.AtEndOfStream) eval(_g.lib.ReadAll());
+      _g.lib.close();
     }
     _g.loc='';
   }
-   _g.loc=' in /JBEG code';
+  _g.loc=' in /JBEG code';
   eval(env( env('/V') ? env('/JBEG') : '/JBEG' ));
   _g.loc='';
 
-  _g.fmtNum=function(val,pad){return pad.length==0 ? '' : lpad(val,pad)+':';}
+  _g.fmtNum=function(val,pad){return pad.length==0 ? '' : lpad(val,pad)+_g.delim;}
 
   _g.writeMatch=function(str,off,lnPad,offPad) {
     if (str!==false) {
@@ -546,8 +789,17 @@ try {
     eval(_g.replFunc);
   }
 
+  _g.excludeLine=function() {
+    if (_g.excludeStr) {
+      _g.loc=' in /INC, /EXC code';
+      _g.excludeResult = eval(_g.excludeStr);
+      _g.loc='';
+    }
+    return _g.excludeResult;
+  }
+
   _g.callBeginLine=function($txt) {
-    _g.loc=' in /JBEGLN code'
+    _g.loc=' in /JBEGLN code';
     eval(_g.begLn);
     _g.loc='';
     return $txt;
@@ -575,6 +827,39 @@ try {
     var translate=env('/T');
     _g.begLn=env('/JBEGLN');
     _g.endLn=env('/JENDLN');
+    if (env('/INC')) {
+      if (env('/INC').search(  // Validate the list
+                        /^(\s*-?\s*\d+(\s*:\s*-?\s*\d+)?\s*,)*\s*-?\s*\d+(\s*:\s*-?\s*\d+)?\s*$/
+                      )<0) throw new Error(204, 'Invalid /INC value');
+      _g.excludeStr='!('+env('/INC').replace(    // Remove spaces
+                                       /\s/g, ""
+                                     ).replace(  // Parse individual values
+                                       /(^|,)(-?\d+)(?=,|$)/g, "$1ln==$2"
+                                     ).replace(  // Parse ranges
+                                       /(-?\d+):(-?\d+)/g, "ln>=$1&&ln<=$2"
+                                     ).replace(  // Parse negative values
+                                       /-\d+/g, "cnt$&+1"
+                                     ).replace(  // Parse commas
+                                       /,/g, "||"
+                                     )+')';
+    }
+    if (env('/EXC')) {
+      if (env('/EXC').search(  // Validate the list
+                        /^(\s*-?\s*\d+(\s*:\s*-?\s*\d+)?\s*,)*\s*-?\s*\d+(\s*:\s*-?\s*\d+)?\s*$/
+                      )<0) throw new Error(205, 'Invalid /EXC value');
+      if (_g.excludeStr) _g.excludeStr+='||';
+      _g.excludeStr+=env('/EXC').replace(    // Remove spaces
+                                   /\s/g, ""
+                                 ).replace(  // Parse individual values
+                                   /(^|,)(-?\d+)(?=,|$)/g, "$1ln==$2"
+                                 ).replace(  // Parse ranges
+                                   /(-?\d+):(-?\d+)/g, "ln>=$1&&ln<=$2"
+                                 ).replace(  // Parse negative values
+                                   /-\d+/g, "cnt$&+1"
+                                 ).replace(  // Parse commas
+                                   /,/g, "||"
+                                 );
+    }
     if (multi) options+='m';
     if (env('/V')) {
       search=env(search);
@@ -610,7 +895,7 @@ try {
         'x'.replace(test,function(){xcnt=arguments.length-2; return '';});
         _g.replFunc='_g.replFunc=function($0';
         for (var i=1; i<xcnt; i++) _g.replFunc+=',$'+i;
-        _g.replFunc+=',$off,$src){_g.loc=" in Replace code";'+( jmatch ? '_g.writeMatch(eval(_g.replace),$off,\''+lnPad+'\',\''+offPad+'\');_g.loc="";return $0;}' : 'var rtn=eval(_g.replace);_g.log="";return rtn;}' );
+        _g.replFunc+=',$off,$src){_g.loc=" in Replace code";'+( jmatch ? '_g.writeMatch(eval(_g.replace),$off,\''+lnPad+'\',\''+offPad+'\');_g.loc="";return $0;}' : '_g.rtn2=eval(_g.replace);_g.log="";return _g.rtn2;}' );
         _g.defineReplFunc();
       }
       _g.replace=replace;
@@ -664,8 +949,8 @@ try {
       _g.loc='';
       _g.replFunc='_g.replFunc=function($0';
       for (var i=1; i<j; i++) _g.replFunc+=',$'+i;
-      _g.replFunc+=',$off,$src){_g.loc=" in Replace code"; for (var i=1;i<arguments.length-2;i++) if (arguments[i]!==undefined) ';
-      _g.replFunc+= jmatch ? '{_g.writeMatch(eval(_g.replace[i]),$off,\''+lnPad+'\',\''+offPad+'\');_g.loc="";return $0;}}' : '{var rtn=eval(_g.replace[i]);_g.loc="";return rtn;}}';
+      _g.replFunc+=',$off,$src){_g.loc=" in Replace code"; for (_g.i=1;_g.i<arguments.length-2;_g.i++) if (arguments[_g.i]!==undefined) ';
+      _g.replFunc+= jmatch ? '{_g.writeMatch(eval(_g.replace[_g.i]),$off,\''+lnPad+'\',\''+offPad+'\');_g.loc="";return $0;}}' : '{_g.rtn2=eval(_g.replace[_g.i]);_g.loc="";return _g.rtn2;}}';
       _g.defineReplFunc();
       jexpr=true;
     }
@@ -696,7 +981,7 @@ try {
         str2=str1=input.ReadLine();
         ln++;
         if (_g.begLn) str2=_g.callBeginLine(str2);
-        if (!skip) str2=str2.replace(search,repl);
+        if (!_g.excludeLine() && !skip) str2=str2.replace(search,repl);
         if (_g.endLn) str2=_g.callEndLine(str2);
         if (str2!==false && !jmatch && (!alterations || str1!=str2)) output.WriteLine(_g.fmtNum(ln,lnPad)+str2);
         if (str1!=str2 && !jmatch) _g.rtn=0;
@@ -756,21 +1041,35 @@ function decode(str, searchSwitch) {
         case 'x9d': return '\u009D';
         case 'x9e': return '\u017E';
         case 'x9f': return '\u0178';
-        case '\\':
-        case 'b':
-        case 'f':
-        case 'n':
-        case 'r':
-        case 't':
-        case 'v':   return searchSwitch===false ? $0 : eval('"'+$0+'"');
-        default:    return eval('"'+$0+'"');
+        default:    return searchSwitch===false ? $0 : eval('"'+$0+'"');
       }
     }
   );
   return str;
 }
 
-function lpad( val, pad ) {
-  var rtn=val.toString();
-  return (rtn.length<pad.length) ? (pad+rtn).slice(-pad.length) : val;
+function lpad( val, arg2, arg3 ) {
+  var rtn=val.toString(), len, pad, cnt;
+  if (typeof arg2 === "string") {
+    pad = arg2;
+    len = arg2.length;
+  } else {
+    len = arg2;
+    pad = arg3 ? arg3 : '                                                  ';
+    while (pad.length < len) pad+=pad;
+  }
+  return (rtn.length<len) ? pad.slice(0,len-rtn.length)+rtn : rtn;
+}
+
+function rpad( val, arg2, arg3 ) {
+  var rtn=val.toString(), len, pad, cnt;
+  if (typeof arg2 === "string") {
+    pad = arg2;
+    len = arg2.length;
+  } else {
+    len = arg2;
+    pad = typeof arg3 === "string" ? arg3 : '                                                  ';
+    while (pad.length < len) pad+=pad;
+  }
+  return (rtn.length<pad.length) ? rtn+pad.slice(rtn.length-len) : rtn;
 }
